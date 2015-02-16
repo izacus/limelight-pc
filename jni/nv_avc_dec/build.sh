@@ -1,5 +1,4 @@
 rm *.o libnv_avc_dec.so
-gcc -I /usr/lib/jvm/java-7-openjdk-amd64/include/ -I ./inc -fPIC -L. -c *.c
-gcc -shared -Wl,-soname,libnv_avc_dec.so -Wl,--no-undefined -o libnv_avc_dec.so *.o -L. -lavcodec -lavfilter -lavformat -lavutil -lswresample -lswscale
+gcc-4.9 -I ${JAVA_HOME}/include/ -I ${JAVA_HOME}/include/darwin -I ./inc -fPIC -L. -c *.c
+gcc-4.9 -shared -Wl,-install_name,libnv_avc_dec.dylib -Wl,-undefined,dynamic_lookup -o libnv_avc_dec.dylib *.o -L. -lavcodec -lavfilter -lavformat -lavutil -lswresample -lswscale
 rm *.o
-
