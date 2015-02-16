@@ -6,7 +6,7 @@ import com.jogamp.opengl.util.texture.Texture;
 import com.jogamp.opengl.util.texture.TextureData;
 import com.limelight.nvstream.av.ByteBufferDescriptor;
 import com.limelight.nvstream.av.DecodeUnit;
-import com.limelight.nvstream.av.video.VideoDecoderRenderer;
+import com.limelight.nvstream.av.video.VideoDepacketizer;
 import com.limelight.nvstream.av.video.cpu.AvcDecoder;
 
 import javax.media.opengl.*;
@@ -27,7 +27,7 @@ import java.nio.IntBuffer;
  * Date: 2/1/14
  * Time: 11:42 PM.
  */
-public class GLDecoderRenderer implements VideoDecoderRenderer, GLEventListener {
+public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEventListener {
     protected int targetFps;
     protected int width, height;
 
@@ -45,6 +45,8 @@ public class GLDecoderRenderer implements VideoDecoderRenderer, GLEventListener 
     protected final GLCapabilities glcapabilities;
     protected final GLCanvas       glcanvas;
     private         FPSAnimator    animator;
+    private Thread decoderThread;
+    private boolean dying = false;
 
     public GLDecoderRenderer() {
         GLProfile.initSingleton();
@@ -53,7 +55,7 @@ public class GLDecoderRenderer implements VideoDecoderRenderer, GLEventListener 
         glcanvas = new GLCanvas(glcapabilities);
     }
 
-    @Override public void setup(int width, int height, int redrawRate, Object renderTarget, int drFlags) {
+    @Override public boolean setup(int width, int height, int redrawRate, Object renderTarget, int drFlags) {
         this.targetFps = redrawRate;
         this.width = width;
         this.height = height;
@@ -99,10 +101,35 @@ public class GLDecoderRenderer implements VideoDecoderRenderer, GLEventListener 
         frame.add(glcanvas, 0, 0);
 
         animator = new FPSAnimator(glcanvas, targetFps);
+        return true;
     }
 
-    @Override public void start() {
+    @Override public boolean start(final VideoDepacketizer depacketizer) {
         animator.start();
+        decoderThread = new Thread() {
+            @Override
+            public void run() {
+                DecodeUnit du;
+                while (!dying) {
+                    try {
+                        du = depacketizer.takeNextDecodeUnit();
+                    } catch (InterruptedException e1) {
+                        return;
+                    }
+
+                    if (du != null) {
+                        submitDecodeUnit(du);
+                        depacketizer.freeDecodeUnit(du);
+                    }
+
+                }
+            }
+        };
+        decoderThread.setPriority(Thread.MAX_PRIORITY - 1);
+        decoderThread.setName("Video - Decoder (CPU)");
+        decoderThread.start();
+
+        return true;
     }
 
 
@@ -211,6 +238,8 @@ public class GLDecoderRenderer implements VideoDecoderRenderer, GLEventListener 
      */
     @Override public void stop() {
         animator.stop();
+        dying = true;
+        decoderThread.interrupt();
     }
 }
 
