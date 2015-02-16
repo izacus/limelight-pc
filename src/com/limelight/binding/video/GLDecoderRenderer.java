@@ -36,6 +36,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
     protected float         frameVideoAspectDiff;
     protected BufferedImage image;
     protected int[]         imageBuffer;
+    protected IntBuffer     wrappedImageBuffer;
 
     protected static final int DECODER_BUFFER_SIZE = 92 * 1024;
     protected ByteBuffer decoderBuffer;
@@ -50,6 +51,9 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
 
     private Thread decoderThread;
     private boolean dying = false;
+
+    private Texture texture;
+    private TextureData textureData;
 
     public GLDecoderRenderer() {
         GLProfile.initSingleton();
@@ -75,6 +79,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
         image = new BufferedImage(width, height,
                                   BufferedImage.TYPE_INT_ARGB);
         imageBuffer = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+        wrappedImageBuffer = IntBuffer.wrap(imageBuffer);
 
         int err = AvcDecoder.init(width, height, avcFlags, threadCount);
         if (err != 0) {
@@ -143,10 +148,30 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
 
     @Override
     public void init(GLAutoDrawable glautodrawable) {
+        GL2 gl = glautodrawable.getGL().getGL2();
+        texture = new Texture(0);
+        texture.bind(gl);
+        textureData = new TextureData(glprofile,
+                                        4,
+                                        width,
+                                        height,
+                                        0,
+                                        gl.GL_BGRA,
+                                        gl.GL_UNSIGNED_INT_8_8_8_8_REV,
+                                        false,
+                                        false,
+                                        true,
+                                        wrappedImageBuffer,
+                                        null);
     }
 
     @Override
     public void dispose(GLAutoDrawable glautodrawable) {
+        if (texture != null) {
+            textureData = null;
+            texture.destroy(glautodrawable.getGL().getGL2());
+            texture = null;
+        }
     }
 
     @Override
@@ -159,25 +184,13 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
         gl.glClearColor(0f, 0f, 0f, 1f);
         gl.glClear(GL.GL_COLOR_BUFFER_BIT);
 
-        IntBuffer bufferRGB = IntBuffer.wrap(imageBuffer);
         gl.glEnable(gl.GL_TEXTURE_2D);
+        wrappedImageBuffer.rewind();
         // OpenGL only supports BGRA and RGBA, rather than ARGB or ABGR (from the buffer)
         // So we instruct it to read the packed RGB values in the appropriate (REV) order
-        Texture texture = new Texture(gl,
-                                      new TextureData(glprofile,
-                                                      4,
-                                                      width,
-                                                      height,
-                                                      0,
-                                                      gl.GL_BGRA,
-                                                      gl.GL_UNSIGNED_INT_8_8_8_8_REV,
-                                                      false,
-                                                      false,
-                                                      true,
-                                                      bufferRGB,
-                                                      null));
+
         texture.enable(gl);
-        texture.bind(gl);
+        texture.updateImage(gl, textureData);
 
         gl.glBegin(gl.GL_QUADS);
         // This flips the texture as it draws it, as the opengl coordinate system is different
@@ -195,9 +208,6 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
 
         gl.glEnd();
         texture.disable(gl);
-        texture.destroy(gl);
-
-        long refreshTime = System.currentTimeMillis() - lastRender;
         lastRender = System.currentTimeMillis();
     }
 
@@ -205,9 +215,9 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
      * Releases resources held by the decoder.
      */
     @Override public void release() {
+        stop();
         AvcDecoder.destroy();
     }
-
 
     /**
      * Give a unit to be decoded to the decoder.
