@@ -33,6 +33,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
 
     protected Graphics      graphics;
     protected JFrame        frame;
+    protected float         frameVideoAspectDiff;
     protected BufferedImage image;
     protected int[]         imageBuffer;
 
@@ -45,6 +46,8 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
     protected final GLCapabilities glcapabilities;
     protected final GLCanvas       glcanvas;
     private         FPSAnimator    animator;
+
+
     private Thread decoderThread;
     private boolean dying = false;
 
@@ -61,7 +64,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
         this.height = height;
 
         // Two threads to ease the work, especially for higher resolutions and frame rates
-        int avcFlags = AvcDecoder.BILINEAR_FILTERING;
+        int avcFlags = AvcDecoder.FAST_BILINEAR_FILTERING | AvcDecoder.SLICE_THREADING | AvcDecoder.FAST_DECODE;
         int threadCount = 2;
 
         frame = (JFrame) renderTarget;
@@ -83,6 +86,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
 
         // Add canvas to the frame
         glcanvas.setSize(frame.getWidth(), frame.getHeight());
+        frameVideoAspectDiff = Math.abs((frame.getWidth() / (float)frame.getHeight()) - (width / (float)height)) / 2.0f;
         glcanvas.addGLEventListener(this);
 
         for (MouseListener m : frame.getMouseListeners()) {
@@ -149,8 +153,11 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
     public void display(GLAutoDrawable glautodrawable) {
         // Decode the image
         boolean decoded = AvcDecoder.getRgbFrameInt(imageBuffer, imageBuffer.length);
+        if (!decoded) return;
 
         GL2 gl = glautodrawable.getGL().getGL2();
+        gl.glClearColor(0f, 0f, 0f, 1f);
+        gl.glClear(GL.GL_COLOR_BUFFER_BIT);
 
         IntBuffer bufferRGB = IntBuffer.wrap(imageBuffer);
         gl.glEnable(gl.GL_TEXTURE_2D);
@@ -175,16 +182,16 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
         gl.glBegin(gl.GL_QUADS);
         // This flips the texture as it draws it, as the opengl coordinate system is different
         gl.glTexCoord2f(0.0f, 0.0f);
-        gl.glVertex3f(-1.0f, 1.0f, 1.0f); // Bottom Left Of The Texture and Quad
+        gl.glVertex3f(-1.0f, 1.0f - frameVideoAspectDiff, 1.0f); // Bottom Left Of The Texture and Quad
 
         gl.glTexCoord2f(1.0f, 0.0f);
-        gl.glVertex3f(1.0f, 1.0f, 1.0f); // Bottom Right Of The Texture and Quad
+        gl.glVertex3f(1.0f, 1.0f - frameVideoAspectDiff, 1.0f); // Bottom Right Of The Texture and Quad
 
         gl.glTexCoord2f(1.0f, 1.0f);
-        gl.glVertex3f(1.0f, -1.0f, 1.0f); // Top Right Of The Texture and Quad
+        gl.glVertex3f(1.0f, -1.0f + frameVideoAspectDiff, 1.0f); // Top Right Of The Texture and Quad
 
         gl.glTexCoord2f(0.0f, 1.0f);
-        gl.glVertex3f(-1.0f, -1.0f, 1.0f);
+        gl.glVertex3f(-1.0f, -1.0f + frameVideoAspectDiff, 1.0f);
 
         gl.glEnd();
         texture.disable(gl);
