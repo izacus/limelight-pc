@@ -68,7 +68,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
         this.height = height;
 
         // Two threads to ease the work, especially for higher resolutions and frame rates
-        int avcFlags = AvcDecoder.FAST_BILINEAR_FILTERING | AvcDecoder.SLICE_THREADING | AvcDecoder.FAST_DECODE;
+        int avcFlags = AvcDecoder.FAST_BILINEAR_FILTERING | AvcDecoder.SLICE_THREADING;
         int threadCount = 2;
 
         frame = (JFrame) renderTarget;
@@ -177,8 +177,7 @@ public class GLDecoderRenderer extends SwingCpuDecoderRenderer implements  GLEve
     @Override
     public void display(GLAutoDrawable glautodrawable) {
         // Decode the image
-        boolean decoded = AvcDecoder.getRgbFrameInt(imageBuffer, imageBuffer.length);
-        if (!decoded) return;
+        AvcDecoder.getRgbFrameInt(imageBuffer, imageBuffer.length);
 
         GL2 gl = glautodrawable.getGL().getGL2();
         gl.glClearColor(0f, 0f, 0f, 1f);
